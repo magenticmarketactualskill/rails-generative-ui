@@ -1,0 +1,321 @@
+@startuml rails-generative-ui-class-diagram
+
+!define COMPONENT_COLOR #E8F5E9
+!define SERVICE_COLOR #E3F2FD
+!define HELPER_COLOR #FFF3E0
+!define MODEL_COLOR #F3E5F5
+
+package "Rails Application" {
+  class ApplicationController {
+    +include RailsGenerativeUi::ControllerHelpers
+  }
+  
+  class ChatController {
+    +create()
+    +stream()
+  }
+  
+  class ApplicationHelper {
+    +include RailsGenerativeUi::ViewHelpers
+  }
+}
+
+package "RailsGenerativeUi::Core" <<Rectangle>> {
+  
+  class Configuration <<SERVICE_COLOR>> {
+    +ollama_base_url: String
+    +default_model: String
+    +streaming_enabled: Boolean
+    +timeout: Integer
+    +api_key: String
+    +validate()
+  }
+  
+  class Railtie {
+    +initializers()
+    +generators()
+  }
+  
+  class Engine {
+    +isolate_namespace()
+    +config()
+  }
+}
+
+package "RailsGenerativeUi::Tools" <<Rectangle>> {
+  
+  abstract class Tool <<MODEL_COLOR>> {
+    +description: String
+    +input_schema: Schema
+    +component_class: Class
+    {abstract} +execute(**params): Hash
+    +validate_input(params): Boolean
+    +to_ollama_tool(): Hash
+  }
+  
+  class ToolRegistry <<SERVICE_COLOR>> {
+    -tools: Hash
+    +register(tool_class)
+    +unregister(tool_name)
+    +find(tool_name): Tool
+    +all(): Array<Tool>
+    +to_ollama_tools(): Array<Hash>
+  }
+  
+  class WeatherTool {
+    +execute(location): Hash
+  }
+  
+  class ProductSearchTool {
+    +execute(query, filters): Hash
+  }
+  
+  class DataVisualizationTool {
+    +execute(data_source, chart_type): Hash
+  }
+}
+
+package "RailsGenerativeUi::Client" <<Rectangle>> {
+  
+  class OllamaClient <<SERVICE_COLOR>> {
+    -base_url: String
+    -http_client: Faraday::Connection
+    -config: Configuration
+    +initialize(config)
+    +generate(prompt, options): Response
+    +chat(messages, tools, options): Response
+    +stream_chat(messages, tools, options, &block)
+    +list_models(): Array
+    -build_request(params): Hash
+    -parse_response(response): Hash
+    -handle_error(error)
+  }
+  
+  class Response {
+    +content: String
+    +tool_calls: Array<ToolCall>
+    +model: String
+    +done: Boolean
+    +has_tool_calls?(): Boolean
+  }
+  
+  class ToolCall {
+    +name: String
+    +arguments: Hash
+    +id: String
+  }
+}
+
+package "RailsGenerativeUi::Messages" <<Rectangle>> {
+  
+  class MessageHandler <<SERVICE_COLOR>> {
+    -ollama_client: OllamaClient
+    -tool_registry: ToolRegistry
+    -component_renderer: ComponentRenderer
+    +initialize(client, registry, renderer)
+    +process(message, conversation, tools): UIMessage
+    +process_streaming(message, conversation, tools, &block)
+    -execute_tools(tool_calls): Array<ToolResult>
+    -build_ui_message(response, tool_results): UIMessage
+  }
+  
+  class UIMessage <<MODEL_COLOR>> {
+    +id: String
+    +role: String
+    +parts: Array<MessagePart>
+    +created_at: DateTime
+    +to_h(): Hash
+  }
+  
+  abstract class MessagePart <<MODEL_COLOR>> {
+    +type: String
+    {abstract} +render(): String
+  }
+  
+  class TextPart {
+    +content: String
+    +render(): String
+  }
+  
+  class ComponentPart {
+    +tool_name: String
+    +state: String
+    +output: Hash
+    +error: String
+    +render(): String
+  }
+  
+  class Conversation <<MODEL_COLOR>> {
+    +id: String
+    +messages: Array<UIMessage>
+    +add_message(message)
+    +to_ollama_messages(): Array<Hash>
+  }
+}
+
+package "RailsGenerativeUi::Rendering" <<Rectangle>> {
+  
+  class ComponentRenderer <<SERVICE_COLOR>> {
+    +render_component(tool_name, output): String
+    +render_loading(tool_name): String
+    +render_error(tool_name, error): String
+    -find_component_class(tool_name): Class
+    -instantiate_component(component_class, output): ViewComponent
+  }
+  
+  class StreamingHandler <<SERVICE_COLOR>> {
+    +stream_text(text, target)
+    +stream_component(component_html, target)
+    +stream_loading(tool_name, target)
+    +stream_error(error, target)
+    -build_turbo_stream(action, target, content): String
+  }
+}
+
+package "RailsGenerativeUi::Components" <<Rectangle>> {
+  
+  class ContainerComponent <<COMPONENT_COLOR>> {
+    +messages: Array<UIMessage>
+    +layout: Symbol
+    +render(): String
+  }
+  
+  class MessageComponent <<COMPONENT_COLOR>> {
+    +message: UIMessage
+    +render(): String
+  }
+  
+  class InputComponent <<COMPONENT_COLOR>> {
+    +placeholder: String
+    +streaming: Boolean
+    +render(): String
+  }
+  
+  class LoadingComponent <<COMPONENT_COLOR>> {
+    +tool_name: String
+    +render(): String
+  }
+  
+  class WeatherComponent <<COMPONENT_COLOR>> {
+    +temperature: Integer
+    +condition: String
+    +location: String
+    +render(): String
+  }
+  
+  class ProductGridComponent <<COMPONENT_COLOR>> {
+    +products: Array<Hash>
+    +render(): String
+  }
+}
+
+package "RailsGenerativeUi::Helpers" <<Rectangle>> {
+  
+  class ControllerHelpers <<HELPER_COLOR>> {
+    +generative_ui_chat(message, tools, options)
+    +generative_ui_stream(message, tools, options, &block)
+    -current_conversation(): Conversation
+    -save_conversation(conversation)
+  }
+  
+  class ViewHelpers <<HELPER_COLOR>> {
+    +generative_ui_container(messages, options)
+    +generative_ui_messages(messages)
+    +generative_ui_input(options)
+    +generative_ui_panel(type, content, options)
+  }
+}
+
+package "RailsGenerativeUi::Generators" <<Rectangle>> {
+  
+  class InstallGenerator {
+    +create_initializer()
+    +create_directories()
+    +install_dependencies()
+  }
+  
+  class ToolGenerator {
+    +create_tool_file()
+    +create_tool_spec()
+  }
+  
+  class ComponentGenerator {
+    +create_component_file()
+    +create_component_spec()
+    +create_component_preview()
+  }
+  
+  class LayoutGenerator {
+    +create_layout_file()
+    +create_stylesheet()
+    +create_javascript()
+  }
+}
+
+' Relationships
+
+ApplicationController <|-- ChatController
+ChatController ..> ControllerHelpers : includes
+ApplicationHelper ..> ViewHelpers : includes
+
+Configuration --* Engine
+Railtie --> Engine
+
+Tool <|-- WeatherTool
+Tool <|-- ProductSearchTool
+Tool <|-- DataVisualizationTool
+ToolRegistry o-- Tool : manages
+
+OllamaClient --> Configuration : uses
+OllamaClient ..> Response : creates
+Response o-- ToolCall : contains
+
+MessageHandler --> OllamaClient : uses
+MessageHandler --> ToolRegistry : uses
+MessageHandler --> ComponentRenderer : uses
+MessageHandler ..> UIMessage : creates
+MessageHandler ..> Conversation : uses
+
+UIMessage o-- MessagePart : contains
+MessagePart <|-- TextPart
+MessagePart <|-- ComponentPart
+
+' ComponentRenderer renders ViewComponents
+' StreamingHandler generates TurboStreams
+
+ContainerComponent ..> MessageComponent : uses
+ContainerComponent ..> InputComponent : uses
+MessageComponent ..> LoadingComponent : may use
+MessageComponent ..> WeatherComponent : may render
+MessageComponent ..> ProductGridComponent : may render
+
+ControllerHelpers --> MessageHandler : uses
+ControllerHelpers --> StreamingHandler : uses
+ViewHelpers --> ContainerComponent : renders
+ViewHelpers --> InputComponent : renders
+
+' Tool specifies which component to render
+WeatherTool --> WeatherComponent : renders to
+ProductSearchTool --> ProductGridComponent : renders to
+
+note right of Tool
+  Tools define what UI components
+  can be generated by the LLM
+end note
+
+note right of MessageHandler
+  Orchestrates the flow from
+  user message to UI components
+end note
+
+note right of ComponentRenderer
+  Maps tool outputs to
+  ViewComponents for rendering
+end note
+
+note right of StreamingHandler
+  Enables progressive rendering
+  via Turbo Streams
+end note
+
+@enduml
